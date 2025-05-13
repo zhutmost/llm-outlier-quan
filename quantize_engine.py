@@ -148,158 +148,95 @@ class QuantizeEngine:
             block_weight=weight[:, block_begin:block_end].clone()
             block_hinvcho=hinvcho[block_begin:block_end, block_begin:block_end].clone()
             
-            if outlier_mode:   
-                block_weight_left, block_weight_right=get_minmax_truncate(
-                    block_weight.repeat(block_size+1, 1), 
-                    block_hinvcho.diag(), 
-                    bits, 
-                    sym
-                )
-                quantizer.find_params(
-                    block_weight.repeat(block_size+1, 1), 
-                    xmin=block_weight_left,
-                    xmax=block_weight_right,
-                    weight=True
-                )
-            else:
-                quantizer.find_params(
-                    block_weight.repeat(block_size+1, 1), 
-                    weight=True
-                )
+            def quantize_block(capacity_offset: torch.Tensor=torch.tensor([])):
+                if capacity_offset.numel()==0:
+                    capacity_offset=torch.zeros(block_size, device=self.dev)
 
-            # block=>capacity
-            capacity_size=block_size
-            capacity_weight=block_weight.unsqueeze(0).repeat(capacity_size+1, 1, 1)
-            capacity_weight_quant=torch.zeros_like(capacity_weight, device=self.dev, dtype=torch.int16)
-            capacity_error=torch.zeros_like(capacity_weight, dtype=torch.float)
-            capacity_hinvcho=block_hinvcho.unsqueeze(0).repeat(capacity_size+1, 1, 1)
-            capacity_mask=(torch.arange(-1, capacity_size, device=self.dev).unsqueeze(1)==torch.arange(capacity_size, device=self.dev).unsqueeze(0)).unsqueeze(1).repeat(1, weight.shape[0], 1)
-            capacity_mask_victim=mask_filter_victim(capacity_mask.flatten(0, 1)).reshape(capacity_size+1, -1, capacity_size)
-            if outlier_mode:
-                capacity_permute=torch.arange(capacity_size, device=self.dev).unsqueeze(0).repeat(capacity_size+1, 1)
-                for i in range(0, capacity_size, 4):
-                    capacity_permute[i+1, :4]=torch.tensor((i, i+1, i+2, i+3), device=self.dev)
-                    capacity_permute[i+2, :4]=torch.tensor((i+1, i, i+2, i+3), device=self.dev)
-                    capacity_permute[i+3, :4]=torch.tensor((i+2, i, i+1, i+3), device=self.dev)
-                    capacity_permute[i+4, :4]=torch.tensor((i+3, i, i+1, i+2), device=self.dev)
-                    capacity_permute[(i+1):(i+5), 4:(i+4)]=torch.arange(i, device=self.dev)
-                capacity_permute_inv=capacity_permute.sort(dim=1).indices
-                for i in range(capacity_size+1):
-                    capacity_weight[i]=capacity_weight[i][:, capacity_permute[i]]
-                    capacity_hinvcho[i]=capacity_hinvcho[i][capacity_permute[i]][:, capacity_permute[i]]
-                    capacity_error[i]=capacity_error[i][:, capacity_permute[i]]
-                    capacity_mask[i]=capacity_mask[i][:, capacity_permute[i]]
-                    capacity_mask_victim[i]=capacity_mask_victim[i][:, capacity_permute[i]]              
-            # capacity_size=>column
-            for column_index in range(capacity_size):
-                column_weight=capacity_weight[..., column_index]
-                column_weight_quant=capacity_weight_quant[..., column_index]
-                column_error=capacity_error[..., column_index]
-                column_hinvcho=capacity_hinvcho[:, column_index, column_index]
-                column_mask=capacity_mask[..., column_index]
-                column_mask_victim=capacity_mask_victim[..., column_index]
-                # (write error, mask) quantize 1, get quantized weight, get mask, get error
-                column_weight_quant_dequant=quantizer.quantize(column_weight.flatten())
-                column_weight_quant[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
-                column_weight_quant_dequant=quantizer.dequantize(column_weight_quant_dequant)
-                column_weight_quant_dequant=torch.where(column_mask.flatten(), column_weight.flatten(), column_weight_quant_dequant)
-                column_weight_quant_dequant=torch.where(column_mask_victim.flatten(), 0, column_weight_quant_dequant)
-                column_error[:]=(column_weight-column_weight_quant_dequant.reshape(capacity_size+1, -1))/column_hinvcho.unsqueeze(1)
-                # (write weight) update weight
-                column_weight[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
-                capacity_weight[..., (column_index+1):]-=\
-                    column_error.unsqueeze(2)*capacity_hinvcho[:, column_index, (column_index+1):].unsqueeze(1)
-            
-            if outlier_mode:
-                capacity_index=capacity_error.square().sum(dim=2).min(dim=0).indices 
-                for i in range(capacity_size+1):
-                    capacity_weight[i]=capacity_weight[i, :, capacity_permute_inv[i]]
-                    capacity_error[i]=capacity_error[i, :, capacity_permute_inv[i]]
-                    capacity_mask[i]=capacity_mask[i, :, capacity_permute_inv[i]]
-            else:
-                capacity_index=0
+                if outlier_mode:   
+                    block_weight_left, block_weight_right=get_minmax_truncate(
+                        block_weight.repeat(block_size+1, 1), 
+                        block_hinvcho.diag(), 
+                        bits, 
+                        sym
+                    )
+                    quantizer.find_params(
+                        block_weight.repeat(block_size+1, 1), 
+                        xmin=block_weight_left,
+                        xmax=block_weight_right,
+                        weight=True
+                    )
+                else:
+                    quantizer.find_params(
+                        block_weight.repeat(block_size+1, 1), 
+                        weight=True
+                    )
+
+                # block=>capacity
+                capacity_size=block_size
+                capacity_weight=block_weight.unsqueeze(0).repeat(capacity_size+1, 1, 1)
+                capacity_weight_quant=torch.zeros_like(capacity_weight, device=self.dev, dtype=torch.int16)
+                capacity_error=torch.zeros_like(capacity_weight, dtype=torch.float)
+                capacity_hinvcho=block_hinvcho.unsqueeze(0).repeat(capacity_size+1, 1, 1)
+                capacity_mask=(torch.arange(-1, capacity_size, device=self.dev).unsqueeze(1)==torch.arange(capacity_size, device=self.dev).unsqueeze(0)).unsqueeze(1).repeat(1, weight.shape[0], 1)
+                capacity_mask_victim=mask_filter_victim(capacity_mask.flatten(0, 1)).reshape(capacity_size+1, -1, capacity_size)
+                if outlier_mode:
+                    capacity_permute=torch.arange(capacity_size, device=self.dev).unsqueeze(0).repeat(capacity_size+1, 1)
+                    for i in range(0, capacity_size, 4):
+                        capacity_permute[i+1, :4]=torch.tensor((i, i+1, i+2, i+3), device=self.dev)
+                        capacity_permute[i+2, :4]=torch.tensor((i+1, i, i+2, i+3), device=self.dev)
+                        capacity_permute[i+3, :4]=torch.tensor((i+2, i, i+1, i+3), device=self.dev)
+                        capacity_permute[i+4, :4]=torch.tensor((i+3, i, i+1, i+2), device=self.dev)
+                        capacity_permute[(i+1):(i+5), 4:(i+4)]=torch.arange(i, device=self.dev)
+                    capacity_permute_inv=capacity_permute.sort(dim=1).indices
+                    for i in range(capacity_size+1):
+                        capacity_weight[i]=capacity_weight[i][:, capacity_permute[i]]
+                        capacity_hinvcho[i]=capacity_hinvcho[i][capacity_permute[i]][:, capacity_permute[i]]
+                        capacity_error[i]=capacity_error[i][:, capacity_permute[i]]
+                        capacity_mask[i]=capacity_mask[i][:, capacity_permute[i]]
+                        capacity_mask_victim[i]=capacity_mask_victim[i][:, capacity_permute[i]]              
+                # capacity_size=>column
+                for column_index in range(capacity_size):
+                    column_weight=capacity_weight[..., column_index]
+                    column_weight_quant=capacity_weight_quant[..., column_index]
+                    column_error=capacity_error[..., column_index]
+                    column_hinvcho=capacity_hinvcho[:, column_index, column_index]
+                    column_mask=capacity_mask[..., column_index]
+                    column_mask_victim=capacity_mask_victim[..., column_index]
+                    column_offset=capacity_offset[column_index]
+                    column_weight_quant_dequant=quantizer.quantize(column_weight.flatten(), column_offset)
+                    column_weight_quant[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
+                    column_weight_quant_dequant=quantizer.dequantize(column_weight_quant_dequant, column_offset)
+                    column_weight_quant_dequant=torch.where(column_mask.flatten(), column_weight.flatten(), column_weight_quant_dequant)
+                    column_weight_quant_dequant=torch.where(column_mask_victim.flatten(), 0, column_weight_quant_dequant)
+                    column_error[:]=(column_weight-column_weight_quant_dequant.reshape(capacity_size+1, -1))/column_hinvcho.unsqueeze(1)
+                    column_weight[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
+                    capacity_weight[..., (column_index+1):]-=\
+                        column_error.unsqueeze(2)*capacity_hinvcho[:, column_index, (column_index+1):].unsqueeze(1)
                 
-            capacity_offset=get_offset(capacity_weight_quant[capacity_index, torch.arange(weight.shape[0], device=self.dev), :], 4)
-            if not outlier_mode:
-                capacity_offset=capacity_offset.clamp(min=-1, max=1)
-            
-            if outlier_mode:   
-                block_weight_left, block_weight_right=get_minmax_truncate(
-                    block_weight.repeat(block_size+1, 1), 
-                    block_hinvcho.diag(), 
-                    bits, 
-                    sym, 
-                )
-                quantizer_offset.find_params(
-                    block_weight.repeat(block_size+1, 1), 
-                    xmin=block_weight_left,
-                    xmax=block_weight_right,
-                    weight=True
-                )
+                if outlier_mode:
+                    capacity_index=capacity_error.square().sum(dim=2).min(dim=0).indices 
+                    for i in range(capacity_size+1):
+                        capacity_weight[i]=capacity_weight[i, :, capacity_permute_inv[i]]
+                        capacity_error[i]=capacity_error[i, :, capacity_permute_inv[i]]
+                        capacity_mask[i]=capacity_mask[i, :, capacity_permute_inv[i]]
+                else:
+                    capacity_index=0
+                
+                block_weight_result=capacity_weight[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                block_weight_quant_result=capacity_weight_quant[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]  
+                mask[:, block_begin:block_end]=capacity_mask[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                error[:, block_begin:block_end]=capacity_error[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                return block_weight_result, block_weight_quant_result
+
+            if offset_mode: 
+                block_weight_result, block_weight_quant_result=quantize_block()
+                capacity_offset=get_offset(block_weight_quant_result, 4)
+                if not outlier_mode:
+                    capacity_offset=capacity_offset.clamp(min=-1, max=1)
+                weight[:, block_begin:block_end], _=quantize_block(capacity_offset)
             else:
-                quantizer_offset.find_params(
-                    block_weight.repeat(block_size+1, 1), 
-                    weight=True
-                )
-
-            # block=>capacity
-            capacity_size=block_size
-            capacity_weight=block_weight.unsqueeze(0).repeat(capacity_size+1, 1, 1)
-            capacity_weight_quant=torch.zeros_like(capacity_weight, device=self.dev, dtype=torch.int16)
-            capacity_error=torch.zeros_like(capacity_weight, dtype=torch.float)
-            capacity_hinvcho=block_hinvcho.unsqueeze(0).repeat(capacity_size+1, 1, 1)
-            capacity_mask=(torch.arange(-1, capacity_size, device=self.dev).unsqueeze(1)==torch.arange(capacity_size, device=self.dev).unsqueeze(0)).unsqueeze(1).repeat(1, weight.shape[0], 1)
-            capacity_mask_victim=mask_filter_victim(capacity_mask.flatten(0, 1)).reshape(capacity_size+1, -1, capacity_size)
-            if outlier_mode:
-                capacity_permute=torch.arange(capacity_size, device=self.dev).unsqueeze(0).repeat(capacity_size+1, 1)
-                for i in range(0, capacity_size, 4):
-                    capacity_permute[i+1, :4]=torch.tensor((i, i+1, i+2, i+3), device=self.dev)
-                    capacity_permute[i+2, :4]=torch.tensor((i+1, i, i+2, i+3), device=self.dev)
-                    capacity_permute[i+3, :4]=torch.tensor((i+2, i, i+1, i+3), device=self.dev)
-                    capacity_permute[i+4, :4]=torch.tensor((i+3, i, i+1, i+2), device=self.dev)
-                    capacity_permute[(i+1):(i+5), 4:(i+4)]=torch.arange(i, device=self.dev)
-                capacity_permute_inv=capacity_permute.sort(dim=1).indices
-                for i in range(capacity_size+1):
-                    capacity_weight[i]=capacity_weight[i][:, capacity_permute[i]]
-                    capacity_hinvcho[i]=capacity_hinvcho[i][capacity_permute[i]][:, capacity_permute[i]]
-                    capacity_error[i]=capacity_error[i][:, capacity_permute[i]]
-                    capacity_mask[i]=capacity_mask[i][:, capacity_permute[i]]
-                    capacity_mask_victim[i]=capacity_mask_victim[i][:, capacity_permute[i]]              
-            # capacity_size=>column
-            for column_index in range(capacity_size):
-                column_weight=capacity_weight[..., column_index]
-                column_weight_quant=capacity_weight_quant[..., column_index]
-                column_error=capacity_error[..., column_index]
-                column_hinvcho=capacity_hinvcho[:, column_index, column_index]
-                column_mask=capacity_mask[..., column_index]
-                column_mask_victim=capacity_mask_victim[..., column_index]
-                column_offset=capacity_offset[column_index]
-                # (write error, mask) quantize 1, get quantized weight, get mask, get error
-                column_weight_quant_dequant=quantizer_offset.quantize(column_weight.flatten(), column_offset)
-                column_weight_quant[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
-                column_weight_quant_dequant=quantizer_offset.dequantize(column_weight_quant_dequant, column_offset)
-                column_weight_quant_dequant=torch.where(column_mask.flatten(), column_weight.flatten(), column_weight_quant_dequant)
-                column_weight_quant_dequant=torch.where(column_mask_victim.flatten(), 0, column_weight_quant_dequant)
-                column_error[:]=(column_weight-column_weight_quant_dequant.reshape(capacity_size+1, -1))/column_hinvcho.unsqueeze(1)
-                # (write weight) update weight
-                column_weight[:]=column_weight_quant_dequant.reshape(capacity_size+1, -1)
-                capacity_weight[..., (column_index+1):]-=\
-                    column_error.unsqueeze(2)*capacity_hinvcho[:, column_index, (column_index+1):].unsqueeze(1)
-            
-            if outlier_mode:
-                capacity_index=capacity_error.square().sum(dim=2).min(dim=0).indices 
-                for i in range(capacity_size+1):
-                    capacity_weight[i]=capacity_weight[i, :, capacity_permute_inv[i]]
-                    capacity_error[i]=capacity_error[i, :, capacity_permute_inv[i]]
-                    capacity_mask[i]=capacity_mask[i, :, capacity_permute_inv[i]]
-            else:
-                capacity_index=0
-
-
-            weight[:, block_begin:block_end]=capacity_weight[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
-            error[:, block_begin:block_end]=capacity_error[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
-            mask[:, block_begin:block_end]=capacity_mask[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
-
+                weight[:, block_begin:block_end], _=quantize_block()
+        
             weight[:, block_end:].addmm_(
                 error[:, block_begin:block_end],
                 hinvcho[block_begin:block_end, block_end:], 
@@ -311,7 +248,6 @@ class QuantizeEngine:
             error=error[:, block_permute_inv]
             mask=mask[:, block_permute_inv]
 
-        
         return weight, mask, save_dict
 
 
