@@ -102,79 +102,144 @@ Note the launch arguments:
 <table class="tg">
 <thead>
   <tr>
-    <th class="tg-9wq8">Model</th>
-    <th class="tg-9wq8">Dataset</th>
+    <th class="tg-9wq8">MODEL</th>
+    <th class="tg-9wq8">DATASET</th>
+    <th class="tg-9wq8">BASELINE</th>
     <th class="tg-9wq8">INT4</th>
     <th class="tg-9wq8">INT4+OUTLIER</th>
+    <th class="tg-9wq8">INT4+OFFSET</th>
+    <th class="tg-9wq8">INT4+OUTLIER+OFFSET</th>
   </tr>
 </thead>
 <tbody>
   <tr>
-    <td class="tg-9wq8" rowspan="3">OPT-1.3B</td>
+    <td class="tg-9wq8" rowspan="3">OPT-350M</td>
     <td class="tg-9wq8">WikiText2</td>
-    <td class="tg-9wq8">14.76</td>
-    <td class="tg-9wq8">14.55</td>
+    <td class="tg-9wq8">22.00</td>
+    <td class="tg-9wq8">23.19</td>
+    <td class="tg-9wq8">22.76</td>
+    <td class="tg-9wq8">22.95</td>
+    <td class="tg-9wq8">23.10</td>
   </tr>
   <tr>
     <td class="tg-9wq8">PTB</td>
-    <td class="tg-9wq8">17.45</td>
-    <td class="tg-9wq8">17.20</td>
+    <td class="tg-9wq8">26.08</td>
+    <td class="tg-9wq8">27.49</td>
+    <td class="tg-9wq8">27.48</td>
+    <td class="tg-9wq8">27.73</td>
+    <td class="tg-9wq8">27.91</td>
   </tr>
   <tr>
     <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">20.71</td>
+    <td class="tg-9wq8">21.63</td>
+    <td class="tg-9wq8">21.45</td>
+    <td class="tg-9wq8">21.71</td>
+    <td class="tg-9wq8">21.70</td>
+  </tr>
+  <tr>
+    <td class="tg-9wq8" rowspan="3">OPT-1.3B</td>
+    <td class="tg-9wq8">WikiText2</td>
+    <td class="tg-9wq8">14.62</td>
+    <td class="tg-9wq8">14.76</td>
+    <td class="tg-9wq8">14.55</td>
+    <td class="tg-9wq8">14.84</td>
+    <td class="tg-9wq8">14.65</td>
+  </tr>
+  <tr>
+    <td class="tg-9wq8">PTB</td>
+    <td class="tg-9wq8">16.96</td>
+    <td class="tg-9wq8">17.45</td>
+    <td class="tg-9wq8">17.20</td>
+    <td class="tg-9wq8">17.67</td>
+    <td class="tg-9wq8">17.25</td>
+  </tr>
+  <tr>
+    <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">14.72</td>
     <td class="tg-9wq8">14.98</td>
     <td class="tg-9wq8">14.89</td>
+    <td class="tg-9wq8">15.11</td>
+    <td class="tg-9wq8">14.92</td>
   </tr>
   <tr>
     <td class="tg-9wq8" rowspan="3">OPT-2.7B</td>
     <td class="tg-9wq8">WikiText2</td>
+    <td class="tg-9wq8">12.47</td>
     <td class="tg-9wq8">12.40</td>
     <td class="tg-9wq8">12.24</td>
+    <td class="tg-9wq8">12.56</td>
+    <td class="tg-9wq8">12.23</td>
   </tr>
   <tr>
     <td class="tg-9wq8">PTB</td>
+    <td class="tg-9wq8">15.11</td>
     <td class="tg-9wq8">15.48</td>
     <td class="tg-9wq8">15.30</td>
+    <td class="tg-9wq8">15.56</td>
+    <td class="tg-9wq8">15.34</td>
   </tr>
   <tr>
     <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">13.16</td>
     <td class="tg-9wq8">13.36</td>
     <td class="tg-9wq8">13.28</td>
+    <td class="tg-9wq8">13.47</td>
+    <td class="tg-9wq8">13.33</td>
   </tr>
   <tr>
     <td class="tg-9wq8" rowspan="3">OPT-6.7B</td>
     <td class="tg-9wq8">WikiText2</td>
+    <td class="tg-9wq8">10.86</td>
     <td class="tg-9wq8">10.91</td>
     <td class="tg-9wq8">10.89</td>
+    <td class="tg-9wq8">10.89</td>
+    <td class="tg-9wq8">10.83</td>
   </tr>
   <tr>
     <td class="tg-9wq8">PTB</td>
+    <td class="tg-9wq8">13.09</td>
     <td class="tg-9wq8">13.27</td>
     <td class="tg-9wq8">13.13</td>
+    <td class="tg-9wq8">13.26</td>
+    <td class="tg-9wq8">13.22</td>
   </tr>
   <tr>
     <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">11.74</td>
     <td class="tg-9wq8">11.85</td>
     <td class="tg-9wq8">11.80</td>
+    <td class="tg-9wq8">11.91</td>
+    <td class="tg-9wq8">11.84</td>
   </tr>
   <tr>
     <td class="tg-9wq8" rowspan="3">OPT-13B</td>
     <td class="tg-9wq8">WikiText2</td>
+    <td class="tg-9wq8">10.13</td>
     <td class="tg-9wq8">10.15</td>
     <td class="tg-9wq8">10.13</td>
+    <td class="tg-9wq8">10.08</td>
+    <td class="tg-9wq8">10.09</td>
   </tr>
   <tr>
     <td class="tg-9wq8">PTB</td>
+    <td class="tg-9wq8">12.34</td>
     <td class="tg-9wq8">12.42</td>
     <td class="tg-9wq8">12.40</td>
+    <td class="tg-9wq8">12.46</td>
+    <td class="tg-9wq8">12.44</td>
   </tr>
   <tr>
     <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">11.20</td>
     <td class="tg-9wq8">11.25</td>
     <td class="tg-9wq8">11.24</td>
+    <td class="tg-9wq8">11.27</td>
+    <td class="tg-9wq8">11.26</td>
   </tr>
 </tbody>
 </table>
+
 
 ## Llama
 
@@ -189,31 +254,44 @@ Note the launch arguments:
 <table class="tg">
 <thead>
   <tr>
-    <th class="tg-9wq8">Model</th>
-    <th class="tg-9wq8">Dataset</th>
+    <th class="tg-9wq8">MODEL</th>
+    <th class="tg-9wq8">DATASET</th>
+    <th class="tg-9wq8">BASELINE</th>
     <th class="tg-9wq8">INT4</th>
-    <th class="tg-9wq8">INT4+OUTLIER</th>
+    <th class="tg-9wq8">INT4+OUTLIER</th>>
+    <th class="tg-9wq8">INT4+OFFSET</th>
+    <th class="tg-9wq8">INT4+OUTLIER+OFFSET</th>
   </tr>
 </thead>
 <tbody>
   <tr>
     <td class="tg-9wq8" rowspan="3">LLaMA-7B</td>
     <td class="tg-9wq8">WikiText2</td>
+    <td class="tg-9wq8">5.47</td>
     <td class="tg-9wq8">5.67</td>
     <td class="tg-9wq8">5.56</td>
+    <td class="tg-9wq8">5.78</td>
+    <td class="tg-9wq8">5.61</td>
   </tr>
   <tr>
     <td class="tg-9wq8">PTB</td>
+    <td class="tg-9wq8">20.82</td>
     <td class="tg-9wq8">21.59</td>
     <td class="tg-9wq8">21.43</td>
+    <td class="tg-9wq8">22.42</td>
+    <td class="tg-9wq8">21.55</td>
   </tr>
   <tr>
     <td class="tg-9wq8">C4</td>
+    <td class="tg-9wq8">6.97</td>
     <td class="tg-9wq8">7.15</td>
     <td class="tg-9wq8">7.06</td>
+    <td class="tg-9wq8">7.13</td>
+    <td class="tg-9wq8">7.08</td>
   </tr>
 </tbody>
 </table>
+
 
 ## References
 
