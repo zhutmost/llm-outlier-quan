@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from datasets import load_dataset, load_from_disk
 from transformers import AutoTokenizer, LlamaTokenizer
-from localutil import LocalDataLoad, LocalModelTokenizer
 
 
 def set_seed(seed):
@@ -16,8 +15,7 @@ def set_seed(seed):
 
 def get_wikitext2(nsamples, seqlen, tokenizer, eval_mode=False):
     if not eval_mode:
-        ###### MODIFY: Loading dataset from local cache.
-        traindata=LocalDataLoad.load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
+        traindata=load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
         trainenc = tokenizer("\n\n".join(traindata["text"]), return_tensors="pt")
         trainloader = []
         for _ in range(nsamples):
@@ -29,16 +27,14 @@ def get_wikitext2(nsamples, seqlen, tokenizer, eval_mode=False):
             trainloader.append((inp, tar))
         return trainloader
     else:
-        ###### MODIFY: Loading dataset from local cache.
-        testdata=LocalDataLoad.load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+        testdata=load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
         testenc = tokenizer("\n\n".join(testdata["text"]), return_tensors="pt")
         return testenc
 
 
 def get_ptb(nsamples, seqlen, tokenizer, eval_mode=False):
     if not eval_mode:
-        ###### MODIFY: Loading dataset from local cache.
-        traindata=LocalDataLoad.load_dataset('ptb_text_only', 'penn_treebank', split='train')
+        traindata=load_dataset('ptb_text_only', 'penn_treebank', split='train')
         trainenc = tokenizer("\n\n".join(traindata["sentence"]), return_tensors="pt")
         trainloader = []
         for _ in range(nsamples):
@@ -50,16 +46,14 @@ def get_ptb(nsamples, seqlen, tokenizer, eval_mode=False):
             trainloader.append((inp, tar))
         return trainloader
     else:
-        ###### MODIFY: Loading dataset from local cache.
-        valdata=LocalDataLoad.load_dataset('ptb_text_only', 'penn_treebank', split='validation')
+        valdata=load_dataset('ptb_text_only', 'penn_treebank', split='validation')
         testenc = tokenizer("\n\n".join(valdata["sentence"]), return_tensors="pt")
     return testenc
 
 
 def get_c4(nsamples, seqlen, tokenizer, eval_mode=False):
     if not eval_mode:
-        ###### MODIFY: Loading dataset from local cache.
-        traindata=LocalDataLoad.load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
+        traindata=load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
         trainloader = []
         for _ in range(nsamples):
             while True:
@@ -76,8 +70,7 @@ def get_c4(nsamples, seqlen, tokenizer, eval_mode=False):
         return trainloader
 
     else:
-        ###### MODIFY: Loading dataset from local cache.
-        valdata=LocalDataLoad.load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
+        valdata=load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
         random.seed(0)
         valenc = []
         for _ in range(256):
@@ -99,8 +92,7 @@ def get_c4(nsamples, seqlen, tokenizer, eval_mode=False):
 
 def get_ptb_new(nsamples, seqlen, tokenizer, eval_mode=False):
     if not eval_mode:
-        ###### MODIFY: Loading dataset from local cache.
-        traindata=LocalDataLoad.load_dataset('ptb_text_only', 'penn_treebank', split='train')
+        traindata=load_dataset('ptb_text_only', 'penn_treebank', split='train')
         trainenc = tokenizer(" ".join(traindata["sentence"]), return_tensors="pt")
         trainloader = []
         for _ in range(nsamples):
@@ -112,16 +104,14 @@ def get_ptb_new(nsamples, seqlen, tokenizer, eval_mode=False):
             trainloader.append((inp, tar))
         return trainloader
     else:
-        ###### MODIFY: Loading dataset from local cache.
-        testdata=LocalDataLoad.load_dataset('ptb_text_only', 'penn_treebank', split='test')
+        testdata=load_dataset('ptb_text_only', 'penn_treebank', split='test')
         testenc = tokenizer(" ".join(testdata["sentence"]), return_tensors="pt")
         return testenc
 
 
 def get_c4_new(nsamples, seqlen, tokenizer, eval_mode=False):
     if not eval_mode:
-        ###### MODIFY: Loading dataset from local cache.
-        traindata=LocalDataLoad.load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
+        traindata=load_dataset('allenai/c4', 'allenai--c4', data_files={'train': 'en/c4-train.00000-of-01024.json.gz'}, split='train')
         trainloader = []
         for _ in range(nsamples):
             while True:
@@ -137,8 +127,7 @@ def get_c4_new(nsamples, seqlen, tokenizer, eval_mode=False):
             trainloader.append((inp, tar))
         return trainloader
     else:
-        ###### MODIFY: Loading dataset from local cache.
-        valdata=LocalDataLoad.load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
+        valdata=load_dataset('allenai/c4', 'allenai--c4', data_files={'validation': 'en/c4-validation.00000-of-00008.json.gz'}, split='validation')
         valenc = tokenizer(" ".join(valdata[:1100]["text"]), return_tensors="pt")
         valenc = valenc.input_ids[:, : (256 * seqlen)]
         return valenc
@@ -188,8 +177,7 @@ def get_loaders(name, nsamples=128, seed=0, seqlen=2048, eval_mode=False, model_
     else:
         # for datasets requiring tokenization
         if "llama" in model_path.lower():
-            ###### MODIFY: Loading model from local cache.
-            tokenizer=LocalModelTokenizer.from_pretrained(model_path, use_fast=False)
+            tokenizer=AutoTokenizer.from_pretrained(model_path, use_fast=False)
 
             # fix for transformer 4.28.0.dev0 compatibility
             if tokenizer.bos_token_id != 1 or tokenizer.eos_token_id != 2:
@@ -201,8 +189,7 @@ def get_loaders(name, nsamples=128, seed=0, seqlen=2048, eval_mode=False, model_
                     pass
                     print(f"bos/eos tokens unchanged: {tokenizer.bos_token_id=},  {tokenizer.eos_token_id=}")
         else:
-            ###### MODIFY: Loading model from local cache.
-            tokenizer=LocalModelTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
+            tokenizer=AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
         if name.lower() == "wikitext2":
             data = get_wikitext2(nsamples, seqlen, tokenizer, eval_mode=eval_mode)

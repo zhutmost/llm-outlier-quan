@@ -27,9 +27,7 @@ def suspend_nn_inits():
 
 def get_model(model_path, load_quantized=None, dtype="auto"):
     if dtype == "auto":
-        ###### MODIFY: Loading model from local cache.
-        from localutil import LocalModelConfig
-        dtype=LocalModelConfig.from_pretrained(model_path, trust_remote_code=True).torch_dtype or "auto"
+        dtype=AutoConfig.from_pretrained(model_path, trust_remote_code=True).torch_dtype or "auto"
     else:
         dtype=getattr(torch, dtype)
 
@@ -41,9 +39,7 @@ def get_model(model_path, load_quantized=None, dtype="auto"):
             print("Loading quantized model ...")
             model = load_quantized_model(model, load_quantized)
         else:
-            ###### MODIFY: Loading model from local cache.
-            from localutil import LocalModelLoad
-            model=LocalModelLoad.from_pretrained(model_path, trust_remote_code=True, torch_dtype=dtype)
+            model=AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True, torch_dtype=dtype)
     model.seqlen = 2048
 
     print("Model loaded sucessfully ...")
