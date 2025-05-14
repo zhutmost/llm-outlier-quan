@@ -44,7 +44,7 @@ class QuantizeEngine:
         block_size: int=128,
         qq_group_size: int=16,
         keep_last_columns: int=0,
-        perchannel: bool=True,
+        per_out_dim: bool=True,
         sym: bool=False,
         save_quantization: bool=False,
         percdamp: float=1e-2,
@@ -63,7 +63,7 @@ class QuantizeEngine:
         :note: the un-quantized columns will be a part of the first returned result
         :note: if keep_last_columns > 0, quantized_dequantized_weights[-keep_last_columns:] will be non-quantized
         :param sym: if True, base weight quantization is symmetric
-        :param perchannel: if True, base weight quantization will learn statistics for each output dimension separately
+        :param per_out_dim: if True, base weight quantization will learn statistics for each output dimension separately
         :return: a QuantizationResult tuple that contains(
             weight, _unused, _unused, _unused, _unused, error, mask,
         ), see class QuantizationResult below for details
@@ -95,9 +95,9 @@ class QuantizeEngine:
 
         # initial quantizer
         quantizer=Quantizer()
-        quantizer.configure(bits, perchannel=perchannel, sym=sym, round_zero=True, **kwargs)
+        quantizer.configure(bits, per_out_dim=per_out_dim, sym=sym, round_zero=True, **kwargs)
         quantizer_offset=Quantizer()
-        quantizer_offset.configure(bits, perchannel=perchannel, sym=sym, round_zero=True, **kwargs)
+        quantizer_offset.configure(bits, per_out_dim=per_out_dim, sym=sym, round_zero=True, **kwargs)
         
         
         # initial dimension and iteration-index information

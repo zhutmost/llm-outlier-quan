@@ -247,7 +247,7 @@ def quantize_main(model, dataloader, args, device, save: bool=False, outlier_mod
                     qq_scale_bits=args.qq_scale_bits,
                     qq_zero_bits=args.qq_zero_bits,
                     qq_zero_sym=args.qq_zero_sym,
-                    perchannel=args.perchannel,
+                    per_out_dim=args.per_out_dim,
                     sym=args.sym,
                     save_quantization=save,
                     percdamp=args.percdamp,
@@ -363,7 +363,7 @@ def quantize_nearest(model, args, dev):
         subset=find_sublayers(layer)
         for name in subset:
             quantizer=Quantizer()
-            quantizer.configure(args.wbits, perchannel=True, sym=False)
+            quantizer.configure(args.wbits, per_out_dim=True, sym=False)
             W=subset[name].weight.data
             quantizer.find_params(W, weight=True)
             subset[name].weight.data=quantize(W, quantizer.scale, quantizer.zero, quantizer.maxq).to(
@@ -473,7 +473,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--sym", action="store_true", help="Symmetric quantization")
     parser.add_argument(
-        "--perchannel",
+        "--per_out_dim",
         action="store_true",
         help="fit a unique quantizer to each output dim",
     )

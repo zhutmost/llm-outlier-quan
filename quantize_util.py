@@ -31,7 +31,7 @@ class Quantizer(nn.Module):
     def configure(
         self,
         bits,
-        perchannel=False,
+        per_out_dim=False,
         sym=True,
         round_zero: bool=False,
         qq_scale_bits=None,
@@ -44,7 +44,7 @@ class Quantizer(nn.Module):
 
         self.bits=bits
         self.maxq=torch.tensor(2**bits-1-reserved_bins)
-        self.perchannel=perchannel
+        self.per_out_dim=per_out_dim
         self.sym=sym
         self.round_zero=round_zero
 
@@ -65,7 +65,7 @@ class Quantizer(nn.Module):
         maybe_round_zero=torch.round if self.round_zero else lambda x: x
 
         shape=x.shape
-        if self.perchannel:
+        if self.per_out_dim:
             if weight:
                 x=x.flatten(1)
             else:
@@ -103,7 +103,7 @@ class Quantizer(nn.Module):
         self.scale[xmin_eq_xmax_index]=xmin[xmin_eq_xmax_index]
 
 
-        if not self.perchannel:
+        if not self.per_out_dim:
             repeat_size=shape[0] if weight else shape[1] if len(shape)!=3 else shape[2]
             self.scale=self.scale.repeat(repeat_size)
             self.zero=self.zero.repeat(repeat_size)
@@ -111,7 +111,7 @@ class Quantizer(nn.Module):
         if self.qq_scale_bits is not None:
             scale_groups=self.scale.reshape(-1, self.qq_group_size)
             self.qq_scale=Quantizer(shape=scale_groups.shape)
-            self.qq_scale.configure(self.qq_scale_bits, perchannel=True, sym=False, round_zero=False, **self.qqq_params)
+            self.qq_scale.configure(self.qq_scale_bits, per_out_dim=True, sym=False, round_zero=False, **self.qqq_params)
             self.qq_scale.find_params(scale_groups, weight=True)
             assert self.qq_scale.scale.shape==(scale_groups.shape[0], 1), self.qq_scale.scale.shape
             self.quant_scale=self.qq_scale.quantize(scale_groups)
@@ -121,7 +121,7 @@ class Quantizer(nn.Module):
             zero_groups=self.zero.reshape(-1, self.qq_group_size)
             self.qq_zero=Quantizer(shape=zero_groups.shape)
             self.qq_zero.configure(
-                self.qq_zero_bits, perchannel=True, sym=self.qq_zero_sym, round_zero=False, **self.qqq_params
+                self.qq_zero_bits, per_out_dim=True, sym=self.qq_zero_sym, round_zero=False, **self.qqq_params
             )
             self.qq_zero.find_params(zero_groups, weight=True)
             assert self.qq_zero.scale.shape==(zero_groups.shape[0], 1), self.qq_zero.scale.shape
