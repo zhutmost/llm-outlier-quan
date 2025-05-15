@@ -46,7 +46,7 @@ class QuantizeEngine:
         keep_last_columns: int=0,
         per_out_dim: bool=True,
         sym: bool=False,
-        save_quantization: bool=False,
+        save_quant: bool=False,
         percdamp: float=1e-2,
         outlier_mode: bool=False,
         offset_mode: bool=False,
@@ -55,24 +55,32 @@ class QuantizeEngine:
         """
         :param bits: number of bits used at the lowest level (the full model size will be different!)
         :param block_size: take blocks of this many input features at a time for GPTQ
-        :note: block_size affects runtime and memory, but does not affect the resulting matrix (up to machine precision)
-        :param block_size: fit quantization scaling/statistics to each group of this many input features
-        :param percdamp: relative regularizer added to hessian diagonal before inversion
-        :note: if block_size_in_dim* is None, use the same quantization statistics across all input features
+        :param qq_group_size: take groups of this many first-quantized scales and zeros at a time for second-quantization
         :param keep_last_columns: if not None, keep the last (this many) input features un_quantized and return them
-        :note: the un-quantized columns will be a part of the first returned result
-        :note: if keep_last_columns > 0, quantized_dequantized_weights[-keep_last_columns:] will be non-quantized
-        :param sym: if True, base weight quantization is symmetric
         :param per_out_dim: if True, base weight quantization will learn statistics for each output dimension separately
-        :return: a QuantizationResult tuple that contains(
-            weight, _unused, _unused, _unused, _unused, error, mask,
-        ), see class QuantizationResult below for details
+        :param sym: if True, base weight quantization is symmetric
+        :param save_quant: if True, save the quantized weights and the mask used for the quantization
+        :param percdamp: relative regularizer added to hessian diagonal before inversion
+        :param outlier_mode: if True, preserve BF16 outliers with low-bit-width normallers
+        :param offset_mode: if True, add an offset to each channel to minimize the number of 1
+        :return: weight, mask, save_dict 
         """
         weight=self.layer.weight.detach().to(dtype=torch.float, copy=True)
         error=torch.zeros_like(weight)
         mask=torch.zeros_like(weight, dtype=torch.bool)
         h=self.h 
-        save_dict={}
+        save_dict={
+            "weight": torch.zeros_like(weight, dtype=torch.bfloat16, device=self.dev),
+            "q_weight": torch.zeros_like(weight, dtype=torch.bfloat16, device=self.dev),
+            "q_mask": torch.zeros_like(weight, dtype=torch.bool, device=self.dev),
+            "q_sacle": torch.zeros((weight.shape[0], weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "q_zero": torch.zeros((weight.shape[0], weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "qq_scale_scale": torch.zeros((weight.shape[0]//qq_group_size, weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "qq_scale_zero": torch.zeros((weight.shape[0]//qq_group_size, weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "qq_zero_zero": torch.zeros((weight.shape[0]//qq_group_size, weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "qq_zero_scale": torch.zeros((weight.shape[0]//qq_group_size, weight.shape[1]//block_size), dtype=torch.bfloat16, device=self.dev),
+            "offset": torch.zeros(weight.shape[1], dtype=torch.bfloat16, device=self.dev)
+        }
         
         # initial weight permutation by quantization difficulty
         if outlier_mode:    
@@ -96,9 +104,7 @@ class QuantizeEngine:
         # initial quantizer
         quantizer=Quantizer()
         quantizer.configure(bits, per_out_dim=per_out_dim, sym=sym, round_zero=True, **kwargs)
-        quantizer_offset=Quantizer()
-        quantizer_offset.configure(bits, per_out_dim=per_out_dim, sym=sym, round_zero=True, **kwargs)
-        
+       
         
         # initial dimension and iteration-index information
         assert hinvcho.shape[0]==hinvcho.shape[1]==weight.shape[1], "weight must be [out_features, in_features]"
@@ -107,48 +113,15 @@ class QuantizeEngine:
         block_start_iter=range(0, weight.shape[1]-keep_last_columns, block_size)
         block_start_iter=tqdm(block_start_iter, leave=False)
 
-        # if save_quantization:
-        #     if outlier_mode:
-        #         self.layer.weight_quantized=torch.zeros((weight.shape[0], weight.shape[1]//4), dtype=torch.int16)
-        #         self.layer.weight_outlier_mask=torch.zeros((weight.shape[0], weight.shape[1]), dtype=torch.bool)
-        #         self.layer.weight_q_scale=torch.zeros((weight.shape[0]//4, weight.shape[1]//block_size), dtype=torch.int16)
-        #         self.layer.weight_q_zero=torch.zeros_like(self.layer.weight_q_scale, dtype=torch.int16)
-        #         self.layer.weight_qq_scale_scale=torch.zeros((weight.shape[0]//qq_block_size, weight.shape[1]//block_size), dtype=torch.float16)
-        #         self.layer.weight_qq_scale_zero=torch.zeros_like(self.layer.weight_qq_scale_scale, dtype=torch.float16)
-        #         self.layer.weight_qq_zero_scale=torch.zeros((weight.shape[0]//qq_block_size, weight.shape[1]//block_size), dtype=torch.float16)
-        #         self.layer.weight_qq_zero_zero=torch.zeros_like(self.layer.weight_qq_zero_scale, dtype=torch.float16)
-        #     else:
-        #         self.layer.weight_quantized=torch.zeros_like(weight, dtype=torch.int16)
-        #         self.layer.weight_outlier_mask=torch.zeros_like(self.layer.weight_quantized, dtype=torch.bool)
-        #         self.layer.weight_q_scale=torch.zeros((weight.shape[0]//4, weight.shape[1]//block_size), dtype=torch.int16)
-        #         self.layer.weight_q_zero=torch.zeros_like(self.layer.weight_q_scale, dtype=torch.int16)
-        #         self.layer.weight_qq_scale_scale=torch.zeros((weight.shape[0]//qq_block_size, weight.shape[1]//block_size), dtype=torch.float16)
-        #         self.layer.weight_qq_scale_zero=torch.zeros_like(self.layer.weight_qq_scale_scale, dtype=torch.float16)
-        #         self.layer.weight_qq_zero_scale=torch.zeros((weight.shape[0]//qq_block_size, weight.shape[1]//block_size), dtype=torch.float16)
-        #         self.layer.weight_qq_zero_zero=torch.zeros_like(self.layer.weight_qq_zero_scale, dtype=torch.float16)
-       
-        # if save_quantization and "olive" not in modes and "olive-offset" not in modes:
-            #     self.layer.weight_quantized[:, column_index]=column_weight_quant_dequant.flatten(0)
-            #     self.layer.weight_outlier_mask[:, column_index]=column_mask.flatten(0)
-                            
-        # if outlier_mode:     
-            #     if save_quantization:
-            #         block_weight_bkp_save=block_weight_bkp.reshape((block_weight_bkp.shape[0], block_weight_bkp.shape[1]//4, 4))
-            #         block_mask_save=block_mask.reshape((block_mask.shape[0], block_mask.shape[1]//4, 4))
-            #         block_weight_outlier_save=(block_mask_save*block_weight_bkp_save).sum(dim=-1).to(torch.float16).view(torch.int16)
-            #         block_weight_bkp_save=(block_weight_bkp_save[:, :, 0]%16)+16*(block_weight_bkp_save[:, :, 1]%16)+16*16*(block_weight_bkp_save[:, :, 2]%16)+16*16*16*(block_weight_bkp_save[:, :, 3]%16)
-            #         block_mask_save=block_mask_save.float().sum(dim=-1).bool()
-            #         block_weight_bkp_save=block_weight_bkp_save*(1-block_mask_save.float()).bool()+block_weight_outlier_save*block_mask_save
-            #         self.layer.weight_quantized[:, block_begin//4:block_end//4]=block_weight_bkp_save
-            #         self.layer.weight_outlier_mask[:, block_begin:block_end]=block_mask
-        
-
         for block_begin in block_start_iter:
             block_end=min(block_begin+block_size, weight.shape[1])
-            block_weight=weight[:, block_begin:block_end].clone()
-            block_hinvcho=hinvcho[block_begin:block_end, block_begin:block_end].clone()
+            block_weight=weight[:, block_begin: block_end].clone()
+            block_hinvcho=hinvcho[block_begin: block_end, block_begin: block_end].clone()
             
-            def quantize_block(capacity_offset: torch.Tensor=torch.tensor([])):
+            def quantize_block(
+                capacity_offset: torch.Tensor=torch.tensor([]), 
+                save_quant: bool=False
+            ):
                 if capacity_offset.numel()==0:
                     capacity_offset=torch.zeros(block_size, device=self.dev)
 
@@ -224,8 +197,32 @@ class QuantizeEngine:
                 
                 block_weight_result=capacity_weight[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
                 block_weight_quant_result=capacity_weight_quant[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]  
-                mask[:, block_begin:block_end]=capacity_mask[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
-                error[:, block_begin:block_end]=capacity_error[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                mask[:, block_begin: block_end]=capacity_mask[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                error[:, block_begin: block_end]=capacity_error[capacity_index, torch.arange(weight.shape[0], device=self.dev), :]
+                if save_quant:
+                    save_dict["weight"][:, block_begin: block_end]=block_weight_result
+                    save_dict["q_weight"][:, block_begin: block_end]=block_weight_quant_result
+                    save_dict["q_mask"][:, block_begin: block_end]=mask[:, block_begin: block_end]
+                    if hasattr(quantizer, "qq_scale"):
+                        save_dict["q_sacle"][:, block_begin//block_size]=quantizer.qq_scale.quantize(quantizer.scale.reshape(-1, qq_group_size)).flatten()[:weight.shape[0]]
+                        save_dict["qq_scale_scale"][:, block_begin//block_size]=quantizer.qq_scale.scale.flatten()[:weight.shape[0]//qq_group_size]
+                        save_dict["qq_scale_zero"][:, block_begin//block_size]=quantizer.qq_scale.zero.flatten()[:weight.shape[0]//qq_group_size]
+                    else:
+                        save_dict["q_scale"][:, block_begin//block_size]=quantizer.scale[:weight.shape[0]]
+                        save_dict["qq_scale_scale"]=None
+                        save_dict["qq_scale_zero"]=None
+                    if hasattr(quantizer, "qq_zero"):
+                        save_dict["q_zero"][:, block_begin//block_size]=quantizer.qq_zero.quantize(quantizer.zero.reshape(-1, qq_group_size)).flatten()[:weight.shape[0]]
+                        save_dict["qq_zero_scale"][:, block_begin//block_size]=quantizer.qq_zero.scale.flatten()[:weight.shape[0]//qq_group_size]
+                        save_dict["qq_zero_zero"][:, block_begin//block_size]=quantizer.qq_zero.zero.flatten()[:weight.shape[0]//qq_group_size]
+                    else:
+                        save_dict["q_zero"][:, block_begin//block_size]=quantizer.zero[:weight.shape[0]]
+                        save_dict["qq_zero_scale"]=None
+                        save_dict["qq_zero_zero"]=None
+                    if offset_mode:
+                        save_dict["offset"][block_begin: block_end]=capacity_offset
+                    else:
+                        save_dict["offset"]=None
                 return block_weight_result, block_weight_quant_result
 
             if offset_mode: 
@@ -233,13 +230,13 @@ class QuantizeEngine:
                 capacity_offset=get_offset(block_weight_quant_result, 4)
                 if not outlier_mode:
                     capacity_offset=capacity_offset.clamp(min=-1, max=1)
-                weight[:, block_begin:block_end], _=quantize_block(capacity_offset)
+                weight[:, block_begin: block_end], _=quantize_block(capacity_offset, save_quant)
             else:
-                weight[:, block_begin:block_end], _=quantize_block()
+                weight[:, block_begin: block_end], _=quantize_block(torch.tensor([]), save_quant)
         
             weight[:, block_end:].addmm_(
-                error[:, block_begin:block_end],
-                hinvcho[block_begin:block_end, block_end:], 
+                error[:, block_begin: block_end],
+                hinvcho[block_begin: block_end, block_end:], 
                 alpha=-1
             )
 

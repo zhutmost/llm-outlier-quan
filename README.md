@@ -66,8 +66,9 @@ Note the launch arguments:
 -  `${MODEL}` (str): remote URL on `huggingface_hub` or local path of model to load.
 - `${DATASET}` (str): name [c4, pajama, refinedweb, none, etc.] or local path of calibration data.
 -  `--model_dtype` (str, default="auto"): Model data type loaded. [auto/float16/float32]
-- `--load` (str, default=None): Path to load quantized statistics.
-- `--save` (str, default=False): Path to save quantized statistics.
+- `--load` (str, default="auto"): Path to load quantized statistics.
+- `--save` (str, default=""): Path to save quantized statistics, default for saving the fake-quantized weights.
+-  `--save_true_quant` (bool, default=False): Save the true-quantized datas, containing weights, mask, scales, zeros and offsets (if exists.). Must be set with `--save`.
 -  `--baseline` (flag): Run with BF16 without quantization.
 - `--nearest` (flag): Run simple RTN (round-to-nearest) quantization algorithm.
 -  `--outlier_mode` (flag): Preserve outliers.
@@ -84,21 +85,13 @@ Note the launch arguments:
 -  `--seed` (int, default=0): Seed for randomly sampling calibration data.
 -  `--nsamples` (int, default=128): Number of calibration data samples.
 -  `--percdamp` (float, default=0.01): Dampening rate of Hessian diagonal average.
--  `--true-sequential` (flag): Run in true sequential mode.
+-  `--true_sequential` (flag): Run in true sequential mode.
 -  `--offload_activations` (flag): Offload activations to RAM to save GPU memory.
 
 ## Evaluation Results
 
 ## OPT
 
-<style type="text/css">
-.tg  {border-collapse:collapse;border-spacing:0;}
-.tg td{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg th{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  font-weight:normal;overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg .tg-9wq8{border-color:inherit;text-align:center;vertical-align:middle}
-</style>
 <table class="tg">
 <thead>
   <tr>
@@ -241,16 +234,9 @@ Note the launch arguments:
 </table>
 
 
+
 ## Llama
 
-<style type="text/css">
-.tg  {border-collapse:collapse;border-spacing:0;}
-.tg td{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg th{border-color:black;border-style:solid;border-width:1px;font-family:Arial, sans-serif;font-size:14px;
-  font-weight:normal;overflow:hidden;padding:10px 5px;word-break:normal;}
-.tg .tg-9wq8{border-color:inherit;text-align:center;vertical-align:middle}
-</style>
 <table class="tg">
 <thead>
   <tr>
@@ -258,7 +244,7 @@ Note the launch arguments:
     <th class="tg-9wq8">DATASET</th>
     <th class="tg-9wq8">BASELINE</th>
     <th class="tg-9wq8">INT4</th>
-    <th class="tg-9wq8">INT4+OUTLIER</th>>
+    <th class="tg-9wq8">INT4+OUTLIER</th>
     <th class="tg-9wq8">INT4+OFFSET</th>
     <th class="tg-9wq8">INT4+OUTLIER+OFFSET</th>
   </tr>
@@ -291,6 +277,7 @@ Note the launch arguments:
   </tr>
 </tbody>
 </table>
+
 
 
 ## References

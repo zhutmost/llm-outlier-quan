@@ -7,6 +7,8 @@ from transformers import AutoConfig, AutoModelForCausalLM
 
 from quantize_util import dequantize
 
+import os
+
 MODEL_ERROR_MSG = "Unsupported model type {} - only 'llama', 'Yi', 'opt' and 'falcon' are supported"
 FALCON_TYPES = ("falcon", "refinedweb", "refinedwebmodel")
 LLAMA_LIKE = ("llama", "Yi")
@@ -25,7 +27,7 @@ def suspend_nn_inits():
         torch.nn.init.kaiming_uniform_, torch.nn.init.uniform_, torch.nn.init.normal_ = saved_inits  # restoring
 
 
-def get_model(model_path, load_quantized=None, dtype="auto"):
+def get_model(model_path, load_quantized="", dtype="auto"):
     if dtype == "auto":
         dtype=AutoConfig.from_pretrained(model_path, trust_remote_code=True).torch_dtype or "auto"
     else:
@@ -139,7 +141,14 @@ def get_sequential_groups(model):
 
 
 def read_quant_weight_from_file(load_path, block_i, layer_name):
-    return torch.load(load_path + "/" + str(block_i) + "/" + layer_name)
+    return torch.load(load_path+"/"+str(block_i)+"/"+layer_name)
+
+def write_quant_weight_to_file(quant_weight, save_path, block_i, layer_name):
+    path=save_path+"/"+str(block_i)+"/"+layer_name
+    dir_path=os.path.dirname(path)
+    if dir_path and not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)  
+    return torch.save(quant_weight, path)
 
 
 def load_quantized_model(model, load_path):

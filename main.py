@@ -15,6 +15,7 @@ from model_util import (
     get_model,
     get_model_head,
     get_sequential_groups,
+    write_quant_weight_to_file,
 )
 from quantize_engine import Quantizer, QuantizeEngine, quantize
 
@@ -174,7 +175,7 @@ def get_inps(model, data_iterable, args, dev, nsamples=None):
 
 
 @torch.no_grad()
-def quantize_main(model, dataloader, args, device, save: bool=False, outlier_mode: bool=False, offset_mode: bool=False):
+def quantize_main(model, dataloader, args, device, save: str="", save_true_quant: bool=False, outlier_mode: bool=False, offset_mode: bool=False):
     print("\nStarting quantization ...")
 
     inps, forward_args=get_inps(model, dataloader, args, dev="cpu" if args.offload_activations else device)
@@ -240,7 +241,7 @@ def quantize_main(model, dataloader, args, device, save: bool=False, outlier_mod
             for sublayer_name in subset:
                 print(f"Quantizing module {sublayer_name} of layer {i}: {handler[sublayer_name].layer.weight.size()}")
                 # quantize each sublayer
-                quantize_weight, quantize_mask, _=handler[sublayer_name].quantize(
+                quantize_weight, quantize_mask, save_dict=handler[sublayer_name].quantize(
                     bits=args.wbits,
                     block_size=args.block_size,
                     qq_group_size=args.qq_group_size,
@@ -249,11 +250,21 @@ def quantize_main(model, dataloader, args, device, save: bool=False, outlier_mod
                     qq_zero_sym=args.qq_zero_sym,
                     per_out_dim=args.per_out_dim,
                     sym=args.sym,
-                    save_quantization=save,
+                    save_quant=save,
                     percdamp=args.percdamp,
                     outlier_mode=outlier_mode,
                     offset_mode=offset_mode
                 )
+
+                if save:
+                    if save_true_quant:
+                        del save_dict["weight"]
+                        for k, v in save_dict.items():
+                            if not v:
+                                del save_dict[k]
+                        write_quant_weight_to_file(save_dict, save, i, sublayer_name)
+                    else:
+                        write_quant_weight_to_file(save_dict["weight"], save, i, sublayer_name)
 
                 handler[sublayer_name].layer.weight.data=quantize_weight.to(
                     handler[sublayer_name].layer.weight.data.dtype
@@ -304,27 +315,8 @@ def quantize_main(model, dataloader, args, device, save: bool=False, outlier_mod
         print(stats_payload)
 
 
-    if save:
-        if isinstance(dataloader, torch.Tensor):
-            def batch_generator(testenc, seqlen, nsamples):
-                for i in range(nsamples):
-                    batch=testenc[:, (i * seqlen) : ((i + 1) * seqlen)].to(device)
-                    yield batch
-            dataloader=batch_generator(dataloader, model.seqlen, nsamples)
-
-        torch.onnx.export(
-            model.to(device),
-            dataloader[0][0].to(device),
-            "demo3.onnx",
-            verbose=True,
-            input_names=["image"],
-            output_names=["output"],
-            opset_version=11,
-            dynamic_axes={
-                "image": {0: "batch", 1: "token-num"},
-                "output": {0: "batch", 1: "token-num"},
-            }
-        )
+    
+        
 
 
     print("=====================\nFinal stats:")
@@ -443,8 +435,9 @@ if __name__ == "__main__":
         default="none",
         help="Dataset name [c4, pajama, refinedweb, none, etc.] or path to data where to extract calibration data from.",
     )
-    parser.add_argument("--load", type=str, default=None, help="Path to load quantized statistics.")
-    parser.add_argument("--save", type=str, default=False, help="Path to save quantized statistics.")
+    parser.add_argument("--load", type=str, default="", help="Path to load quantized statistics.")
+    parser.add_argument("--save", type=str, default="", help="Path to save quantized statistics, default as fake-quantization weights.")
+    parser.add_argument("--save_true_quant", type=bool, default=False, help="Save quantized statistics as true-quantization datas.")
     parser.add_argument("--seed", type=int, default=0, help="Seed for sampling the calibration data.")
     parser.add_argument("--nsamples", type=int, default=128, help="Number of calibration data samples.")
     parser.add_argument(
@@ -467,7 +460,7 @@ if __name__ == "__main__":
         help="How many weight columns (input features) are quantized with the same statistics, default=all of them",
     )
     parser.add_argument(
-        "--true-sequential",
+        "--true_sequential",
         action="store_true",
         help="Whether to run in true sequential model.",
     )
